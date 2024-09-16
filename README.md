@@ -1,5 +1,6 @@
 # Inteligencia de Negocios - Procesamiento y transformación de Datos
 **Elaborado por:** Marcos Ulises Sánchez
+
 **Docente:** Msc. Arlen López
 
 ## Reporte
