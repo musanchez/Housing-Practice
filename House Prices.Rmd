@@ -1,0 +1,472 @@
+---
+title: "Preprocesamiento y transformacion de datos"
+author: "Marcos Sánchez"
+output: html_notebook
+---
+El conjunto de datos trabajado contiene información de ventas de casas. Incluye datos como el precio de venta, el año de construcción de la propiedad, año de venta y de remodelación de propiedad, así como características que podrían influir en los precios de las propiedades. En total, contamos con 81 columnas, y no conocemos bien la distribución de los datos. Se realizará una limpieza, además de un pequeño análisis por medio de gráficos de la distribución de los datos, además de transformar las variables para que al entrenar un modelo predictivo este tenga un mejor desempeño.
+
+```{r}
+library(skimr)
+```
+
+## Paso 1: Carga de Datos
+
+```{r}
+df <- read.csv("train.csv")
+df_copy <- read.csv("train.csv")
+head(df)
+```
+
+## Paso 2: Exploración inicial
+
+### Uso de la librería skimr
+Podemos ver que hay un porcentaje de completado en la tabla, también tenemos resumido cuantas variables numéricas hay presentes, valores únicos, mínimos y máximos, si hay espacios en blancos, etc.
+
+```{r}
+skim(df)
+```
+#### **Variables con muchos valores faltantes que son texto:**
+- **Alley**: 1369 valores faltantes, del total de registros, sólo el 6% tienen una entrada.
+- **PoolQC**: 1453 valores faltantes, es bastante probable que casi ninguna de las casas de la muestra tenga piscina. Podríamos conservar esta variable porque puede ser un factor que incide en el precio de forma importante.
+- **FireplaceQu**: 690. Debe ser la calidad de las chimeneas, 690 valores faltantes, debe significar que estas casas no tienen una.
+- **Fence**: 1179 valores faltantes, se refiere al tipo de cerca. Muchas casas posiblemente no cuentan con una.
+- **MiscFeature**: 1406 faltantes, que son características fuera de lo común en las consideraciones de lo que una casa podría tener.
+
+Estas variables tienen como faltantes al menos el **90%** de los registros. Por la cantidad de valores únicos observada, podemos pensar que todas estas variables son categóricas. En el caso de las variables numéricas, a la que le falta una cantidad considerable de registros es a la variable **LotFrontage**, que es más o menos el área de acera en pies cuadrados que tiene la casa. En el caso de **MasVnrArea** es el área del revestimiento de las paredes. La variable **GarageYrBlt** tiene 81 valores faltantes, el mismo número que las variables que representan tipo, acabado, calidad, condición; es decir, que es casi seguro que estas casas simplemente no cuentan con garage.
+
+Con 81 variables en total sería complicado hacer un análisis, pero podemos escoger unas cuantas para el análisis, incluso, de estas, trataremos de reducir su número.
+
+### **Identificación de variables para el análisis** 
+
+1. **MSZoning**: Se refiere al tipo de zona donde se realiza la venta.
+2. **LotArea**: El área del lote en el que se encuentra la casa.
+3. **LotShape**: Forma del lote, que va de regular a irregular.
+4. **Utilities**: Servicios disponibles en la propiedad.
+5. **HouseStyle**: Tipo de casa.
+7. **OverallCond**: Condición en la que se encuentra la casa.
+8. **YearBuilt**: Año de construcción.
+9. **YearRemodAdd**: Año de remodelación, si es que fue remodelada.
+10. **RoofMatl**: Material del que está hecho el techo.
+11. **SalePrice**: Precio de venta.
+12. **YrSold**: Año de venta.
+13. **MoSold**: Mes de venta.
+14. **GarageCars**: Número de autos para el garage, de no haber serán 0.
+15. **GrLivArea**: Área de la vivienda.
+16. **BsmtFullBath**: Baños completos en sótano.
+17. **BsmtHalfBath**: Medios baños en sótano.
+18. **FullBath**: Baños completos (Sin incluir los del sótano)
+19. **HalfBath**: Medios baños (Sin incluir los del sótano)
+20. **BedroomAbvGr**: Número de habitaciones.
+21. **KitchenAbvGr**: Cocinas en sitios que no son el sótano.
+
+
+Creamos un nuevo data frame con las variables que podríamos tomar en consideración.
+
+```{r}
+df <- df[, c("MSZoning", "LotArea", "LotShape", "Utilities", "HouseStyle", 
+             "OverallQual", "OverallCond", "YearBuilt", "YearRemodAdd", 
+             "RoofMatl", "SalePrice", "YrSold", "MoSold", "GarageCars", 
+             "GrLivArea", "BsmtFullBath", "BsmtHalfBath", "FullBath", "HalfBath", 
+             "BedroomAbvGr", "KitchenAbvGr")]
+skim(df)
+
+```
+No hay valores faltantes con las variables que tomamos, intentaremos analizar una por una cada variable. Revisaremos los valores únicos de las variables categóricas.
+
+```{r}
+unique(df$MSZoning)
+unique(df$LotShape)
+unique(df$Utilities)
+unique(df$HouseStyle)
+unique(df$RoofMatl)
+
+```
+No creo que sea conveniente conservar la variable utilities. Todas las casas del data frame cuentan con todos los servicios, a excepción de una que tiene todo menos el alcantarillado.
+Es mejor ignorar esta columna.
+
+```{r}
+table(df$Utilities)
+```
+Eliminamos la columna Utilities del data frame
+```{r}
+df <- subset(df, select = -Utilities)
+```
+
+```{r}
+table(df[, c("MSZoning", "HouseStyle")])
+```
+```{r}
+table(df$RoofMatl)
+table(df$LotShape)
+```
+```{r}
+table(df$HouseStyle)
+```
+Si fuese conocido que el material del que está hecho el techo es un factor muy importante para determinar podría conservarse, lo mismo pasa con la forma del lote, que si es importante, pero no es un factor clave para el precio de una casa. Las variables que terminaremos usando al final serán, el tamaño del lote, espacio que ocupa la vivienda, cantidad de habitaciones, baños, tipo de casa, además de los años de ventas de las casas, construcción y remodelación. En forma de tabla, hemos visto la distribución de las variables categóricas consideradas para saber si merecía o no la pena conservar algunas de ellas. Las que se quedarán, serán:
+
++ LotShape
++ HouseStyle
++ MSZoning
++ OverallQual (ordinal)
++ OverallCond (ordinal)
+
+Otras variables que conservaremos son:
+
++ LotArea
++ GrLivArea
++ BedroomAbvGr
++ SalePrice
++ YrSold
++ MoSold
++ YearBuilt
++ YearRemodAdd
+
+### **Gráficos para comprender variables tomadas**
+
+```{r}
+#Carga del paquete ggplot
+library(ggplot2)
+```
+```{r}
+library(stats)
+summary(df$SalePrice)
+```
+
+Los puntos morados indican las casas con un lote de forma regular, podemos ver que si el lote es de esta forma, el precio si está relacionado de forma líneal con el área cubierta por el lote. Con terrenos más irregulares los puntos están más dispersos. IR1 indica poca irregularidad, y el comportamiento es casi el mismo.
+
+```{r}
+library(scales)
+library(dplyr)
+
+df %>%
+  ggplot(aes(x = LotArea, y = SalePrice)) +
+  geom_point(aes(colour = factor(LotShape))) +
+  labs(title = "Relación entre área del lote y precios de las casas",
+       x = "Área del lote",
+       y = "Precio") +
+  scale_y_continuous(labels = label_number(big.mark = ".", decimal.mark = ",")) +  # Formato sin notación científica
+  scale_x_continuous(labels = label_number(big.mark = ".", decimal.mark = ","))    # También aplica al eje X si es necesario
+```
+
+```{r}
+df %>% 
+  ggplot(aes(x = SalePrice)) +
+  geom_histogram(bins = 10, fill = "skyblue") +
+  labs(title = "Distribución de precios de casas", x = "Precio", y = "Cantidad") +
+  scale_x_continuous(labels = label_number(big.mark = ".", decimal.mark = ","))
+```
+```{r}
+df %>%
+  group_by(YearBuilt) %>%
+  summarize(CantidadCasas = n()) %>%  # n() cuenta las casas por año
+  ggplot(aes(x = YearBuilt, y = CantidadCasas)) +
+  geom_line(color = "blue") +  # Dibuja la línea
+  labs(title = "Cantidad de casas construidas por año",
+       x = "Año de construcción",
+       y = "Cantidad de casas") +
+  scale_x_continuous(breaks = seq(min(df$YearBuilt), max(df$YearBuilt), by = 10))
+
+df %>%
+  group_by(YearRemodAdd) %>%
+  summarize(CantidadCasas = n()) %>%  # n() cuenta las casas por año
+  ggplot(aes(x = YearRemodAdd, y = CantidadCasas)) +
+  geom_line(color = "blue") +  # Dibuja la línea
+  labs(title = "Cantidad de casas remodeladas por año",
+       x = "Año de remodelación",
+       y = "Cantidad de casas") +
+  scale_x_continuous(breaks = seq(min(df$YearBuilt), max(df$YearBuilt), by = 5))
+```
+```{r}
+df %>% 
+  ggplot(aes(x = GrLivArea)) +
+  geom_histogram(bins = 10, fill = "lightgreen") +
+  labs(title = "Área de vivienda de casas", 
+       X = "Área", y = "Frecuencia") +
+  scale_x_continuous(labels = label_number(big.mark = ".", decimal.mark = ","))
+```
+```{r}
+df %>%
+  ggplot(aes(x = BedroomAbvGr)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(min(df$BedroomAbvGr), max(df$BedroomAbvGr), by = 1)) +  # Etiquetas de 1 en 1
+  labs(title = "Distribución de las casas por número de dormitorios",
+       x = "Número de dormitorios",
+       y = "Cantidad de casas")
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+
+df %>%
+  group_by(BedroomAbvGr) %>%
+  summarize(MeanPrice = mean(SalePrice, na.rm = TRUE)) %>%
+  ggplot(aes(x = factor(BedroomAbvGr), y = MeanPrice, fill = factor(BedroomAbvGr))) +
+  geom_col(show.legend = FALSE) +  # Gráfico de barras
+  scale_fill_brewer(palette = "Blues") +  # Cambia la paleta de colores para valores discretos
+  labs(title = "Precio Medio por Número de Dormitorios",
+       x = "Número de Dormitorios",
+       y = "Precio Medio") +
+  theme_minimal()
+
+
+
+```
+Nos damos cuenta que debemos eliminar 6 registros, no tiene sentido que haya una casa sin dormitorios.Y que en promedio, sean las de mayor valor.
+```{r}
+df %>%
+  filter(BedroomAbvGr < 1) %>%
+  select(SalePrice)  
+```
+```{r}
+df %>%
+  ggplot(aes(x = KitchenAbvGr)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(min(df$KitchenAbvGr), max(df$KitchenAbvGr), by = 1)) +  # Etiquetas de 1 en 1
+  labs(title = "Distribución de las casas por número de cocinas",
+       x = "Número de cocinas",
+       y = "Cantidad de casas") +
+  theme_minimal()
+df %>%
+  ggplot(aes(x = FullBath)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(min(df$FullBath), max(df$FullBath), by = 1)) +  # Etiquetas de 1 en 1
+  labs(title = "Distribución de las casas por número de baños completos",
+       x = "Número de baños completos",
+       y = "Cantidad de casas") +
+  theme_minimal()
+
+df %>%
+  ggplot(aes(x = HalfBath)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(min(df$HalfBath), max(df$HalfBath), by = 1)) +  # Etiquetas de 1 en 1
+  labs(title = "Distribución de las casas por número de medios baños",
+       x = "Número de medios baños",
+       y = "Cantidad de casas") +
+  theme_minimal()
+df %>%
+  ggplot(aes(x = GarageCars)) +
+  geom_bar() +
+  scale_x_continuous(breaks = seq(min(df$GarageCars), max(df$GarageCars), by = 1)) +  # Etiquetas de 1 en 1
+  labs(title = "Distribución de las casas espacio de garage",
+       x = "Número de autos en garaje",
+       y = "Cantidad de casas") +
+  theme_minimal()
+```
+```{r}
+
+```
+
+## Paso 3: Limpieza de datos
+
+Nos quedamos con las columnas necesarias, antes mencionamos cuales nos quedaríamos
+
+```{r}
+df <- df[, c("LotShape", "HouseStyle", "MSZoning", "OverallQual", "OverallCond", 
+               "LotArea", "GrLivArea", "BedroomAbvGr", "SalePrice", 
+               "YrSold", "MoSold", "YearBuilt", "YearRemodAdd")
+]
+```
+
+Verificamos nuevamente que no hay valores faltantes:
+
+```{r}
+skim(df)
+```
+No hay valores faltantes, no es necesaria la imputación.Sin embargo, eliminaremos los valores sin sentido encontrados anteriormente.
+
+```{r}
+df <- df[df$BedroomAbvGr > 0, ]
+```
+
+
+## Paso 4: Manejo de Outliers
+
+La variable numérica de mayor relevancia es el precio de venta de las casas, de hecho, sería nuestra variable objetivo en un modelo predictivo. Las áreas de lotes y viviendas también se pueden considerar.
+
+```{r}
+df %>%
+  ggplot(aes(y = factor(BedroomAbvGr), x = SalePrice)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 2, fill = "skyblue") +
+  labs(title = "Precios de casas",
+       y = "Número de habitaciones",
+       x = "Precio") +
+  theme_minimal()
+```
+```{r}
+df %>%
+  ggplot(aes(x = SalePrice)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 2, fill = "skyblue") +
+  labs(title = "Precios de casas",
+       y = "",
+       x = "Precio") +
+  theme_minimal()
+df %>% 
+  filter(BedroomAbvGr == 8)
+```
+Uso de IQR para mostrar los outliers
+```{r}
+Q1 <- quantile(df$SalePrice, 0.25)
+Q3 <- quantile(df$SalePrice, 0.75)
+IQR <- Q3 - Q1
+
+l <- Q1 - 1.5 * IQR
+u <- Q3 + 1.5 * IQR
+
+df %>%
+  filter(SalePrice < l | SalePrice > u) %>%
+  ggplot(aes(x = HouseStyle, fill = MSZoning)) +
+  geom_bar() +
+  labs(title = "Conteo de casas por estilo y zona",
+       x = "Estilo de Casa",
+       y = "Conteo") +
+  theme_minimal()
+```
+Estos outliers parecen datos con sentido, solamente que las casas que están presentes son bastante más lujosas que las demás. No es conveniente eliminar estos outliers, pero si podríamos querer reducir su impacto al correr algún modelo. Una solución es reemplazar estos valores por valores cercanos a los límites para reducir este impacto.
+
+```{r}
+library(DescTools)
+
+?Winsorize
+
+df$SalePrice_win <- Winsorize(df$SalePrice, val = quantile(df$SalePrice, probs = c(0.05, 0.95), na.rm = TRUE))
+
+df %>%
+  ggplot(aes(x = SalePrice_win)) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 2, fill = "skyblue") +
+  labs(title = "Precios de casas",
+       y = "",
+       x = "Precio") +
+  theme_minimal()
+
+```
+Verificamos que no hay outliers en el gráfico de BoxPlot nuevamente.
+
+Paso 5: Transformación de Variables
+
+**Aplicamos min-max scaling**  
+Es bueno hacer esto a varibales continuas, no hacerlo con variables numéricas ordinales como podrían ser ratings, cantidad de habitaciones o fechas.
+Generalmente el min-max scaling se usa cuando queremos que dos o más variables se encuentren en el mismo rango, así ninguna tendrá demasiado peso.
+
+```{r}
+var_scale <- c("LotArea", "GrLivArea", "SalePrice")
+
+df_normalizado <- df %>% 
+  mutate(across(all_of(var_scale), ~ rescale(.)))
+
+summary(df_normalizado)
+
+```
+**Estandarización**
+Es más útil cuando tenemos una distribución normal, o usaremos modelos que dependen de que distribución de nuestros datos sea Gaussiana.
+
+```{r}
+df_standardized <- df %>%
+  mutate(across(all_of(var_scale), ~ scale(.)))
+  
+summary(df_standardized)
+
+```
+### **Transformación logarítmica**
+
+La transformación logarítmica es una buena manera de lidiar con outliers, por esta razón.
+Veamos el gráfico de densidad antes y después de aplicar logaritmos:
+
+```{r}
+df %>%
+  ggplot(aes(log(SalePrice))) +
+  geom_density()+
+  labs(title = "Distribución de precios de las casas")
+  #aes(colour = factor(YrSold))
+
+df %>%
+  ggplot(aes(SalePrice)) +
+  geom_density()+
+  labs(title = "Distribución de precios de las casas")
+  #aes(colour = factor(YrSold))
+
+df %>%
+  ggplot(aes(SalePrice_win)) +
+  geom_density()+
+  labs(title = "Distribución de precios de las casas")
+  #aes(colour = factor(YrSold))
+
+df %>%
+  ggplot(aes(log(SalePrice_win))) +
+  geom_density()+
+  labs(title = "Distribución de precios de las casas")
+  #aes(colour = factor(YrSold))
+```
+
+Notemos como la distribución se vuelve más simétrica, aunque quedarían outlier, si aplicamos logaritmos a la variable winsorizada debería acabar el problema.
+
+```{r}
+df %>%
+  ggplot(aes(x = log(SalePrice_win))) +
+  geom_boxplot(outlier.colour = "red", outlier.shape = 16, outlier.size = 2, fill = "skyblue") +
+  labs(title = "Precios de casas",
+       y = "",
+       x = "Precio") +
+  theme_minimal()
+```
+## 6. Ingeniería de características
+
+### Creación de nuevas variables
+
+Saber la "edad" de la casa al momento de su venta, al igual que cuanto tiempo tenía de haber sido remodelada podría ser un factor determinante para el precio, más fácil de trabajar que años.
+
+```{r}
+df$HouseAge = df$YrSold - df$YearBuilt
+df$YrAfterRemod = df$YrSold - df$YearRemodAdd 
+
+df %>% 
+  select(c(HouseAge, YrAfterRemod))
+
+```
+
+Podemos centrarnos más en factores como lujos, calidad, etc, si dejamos el tamaño de la casa de lado. Podríamos estimar el precio del pie cuadrado en cierta zona, por ejemplo.
+
+```{r}
+df$PriceSqrFt = df$SalePrice / df$LotArea
+
+```
+
+### Codificación de variables categóricas
+
+En R, no es necesario el uso de one-hot encoding en la mayoría de casos porque ya existe el tipo de variable factor para el manejo de variables categóricas. Se puede usar cuando son demasiados factores o hay un orden que seguir, en el cual, sería necesario usar label-encoding, aunque esto de todas formas se resuelve especificando en algunos modelos que los factores son ordinales. Convertiremos a tipo factor las variables categóricas no ordinales. Usaremos one_hot encoding para LotShape y HouseStyle, aunque esto es subjetivo como se quiera tomar, podría haber una preferencia sobre el tipo de forma de lote preferida o consideraciones de un tipo de casa mejor que otro.
+
+```{r}
+library(fastDummies)
+
+df <- dummy_cols(df, select_columns = c("LotShape", "HouseStyle"), remove_first_dummy = TRUE)
+```
+
+
+## Paso 7: Análisis Comparativo
+
+```{r}
+skim(df_copy)
+```
+
+```{r}
+skim(df_normalizado)
+```
+
+```{r}
+skim(df_standardized)
+```
+
+
+```{r}
+skim(df)
+```
+
+A medida que hemos transformado el dataset hemos hecho una comparativa con el sobre los datos iniciales. Algunos aspectos que han cambiado:
+
++ Se han eliminado muchas columnas, que si bien podrian no sentirse necesarias, en algunos casos podría analizarse y conservarse para analizar su impacto en el precio de las casas.
++ La creación de nuevas variables, una que puede ser, otra objetivo y otras que pueden afectar a nuestra variable dependiente, difieren del previo dataset.
++ La estandarización y normalización pueden ser útiles para obtener un mejor modelo. La estandarización, cuando se desea una distribución normal, la normalización evita que variables solamente por su magnitud tengan un efecto demasiado significativo, además de mantener en un rango fijo entre 0 y 1 las variables continuas.
++ Se usó one-hot encoding para asignar un valor vectorial con 0s y 1s a dos de las variables categóricas presentes.
++ Algunas observaciones fueron eliminadas, consideradas sin sentido por tener un número de habitaciones de 0.
++ El uso de logaritmos permitió dar a la distribución de las variables una distribución más simétrica. Podemos observar que previamente se tenía una "cola larga" en uno de los gráficos realizados.
++ Los outliers fueron eliminados por medio de winsorización al convertirlos a valores cercanos a los límites permitidos.
+
