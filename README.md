@@ -7,7 +7,7 @@
 [Enlace de reporte](https://musanchez.github.io/Housing-Practice/)
 
 ## Código fuente
-Se encuentra en el repositorio, archivo R Markdown, extensión Dmd.
+Se encuentra en el repositorio, archivo R Markdown, extensión Rmd.
 
 ## Datos
 Datos obtenidos de [Housing Prices - Advanced Regression Techniques](https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques/data).
